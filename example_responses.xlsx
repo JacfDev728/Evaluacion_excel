@@ -1,0 +1,14 @@
+No.,Respuesta,
+1.,,Cuantos ID tiene la base de datos
+2.,,Cambia el nombre de la columna 'Seguimiento' por 'Sentimiento'
+3.,,"En la tabla, proceda a centrar el contenido de todas las celdas"
+4.,,"En la tabla, ajusta el ancho de las columnas para que el texto completo sea visible"
+5.,,Calcula el número total de llamadas registradas en la tabla
+6.,,Utiliza la función 'Dar formato como tabla' en la tabla.
+7.,,Cuántas llamadas tuvieron un Sentimiento 'Very Positive'
+8.,,Calcula la duración promedio de las llamadas
+9.,,"En la tabla, ajusta el formato fecha a 'dd/mm/yyyy'"
+10.,,Ordena la tabla por 'Puntuación' de mayor a menor y dime ¿Cuál es el puntaje máximo?
+11.,,Cuantas llamadas hay con ese puntaje Máximo
+12.,,Si el 'ID' de un cliente es PJL-11752230. Dime cual es el nombre y apellido al que corresponde
+13.,,"En la tabla, resalta en Rojo las celdas de la columna 'Puntuación' que sean inferiores a 5"

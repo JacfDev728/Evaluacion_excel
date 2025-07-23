@@ -1,0 +1,43 @@
+# Default ignored files (PyCharm/IDE specific)
+/shelf/
+/workspace.xml
+# Editor-based HTTP Client requests
+/httpRequests/
+# Datasource local storage ignored files
+/dataSources/
+/dataSources.local.xml
+
+# Python-specific ignores
+
+# Entorno virtual
+venv/
+.venv/
+
+# Archivos de caché de Python
+__pycache__/
+*.pyc
+*.pyd
+*.pyo
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
+.coverage
+.tox/
+dist/
+build/
+*.whl
+
+# Editores e IDEs (ya tienes algunos, pero añado más comunes)
+.idea/ # Directorio de configuración de PyCharm
+.vscode/ # Directorio de configuración de VS Code
+*.sublime-project
+*.sublime-workspace
+
+# Archivos específicos del sistema operativo
+.DS_Store # macOS
+Thumbs.db # Windows
+
+# Archivos de logs y datos generados localmente que no deben ir al repo
+*.log
+*.sqlite3 # si usas una base de datos SQLite local para desarrollo
+.env # Archivos de variables de entorno (si los usas)
