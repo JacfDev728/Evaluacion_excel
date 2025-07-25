@@ -16,7 +16,9 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.dirname(SCRIPT_DIR)
 DATA_DIR = os.path.join(ROOT_DIR, 'data')
 SUBMISSIONS_DIR = os.path.join(ROOT_DIR, 'user_submissions')
-ORIGINAL_FILE = os.path.join(DATA_DIR, 'base_datos_original.xlsx')
+
+# Archivos de referencia
+TEMPLATE_FILE = os.path.join(DATA_DIR, 'base_datos_original.xlsx')
 EXPECTED_FILE = os.path.join(DATA_DIR, 'respuestas_esperadas.xlsx')
 RESULTS_FILE = 'evaluation_results.xlsx'
 
@@ -24,21 +26,7 @@ RESULTS_FILE = 'evaluation_results.xlsx'
 results = []
 
 # --- Configuración de las preguntas ---
-QUESTIONS = [
-    {"num": 1, "topic": "Edición y formato", "question": "Cuantos ID tiene la base de datos", "expected": 30, "type": "numeric"},
-    {"num": 2, "topic": "Edición y formato", "question": "Cambia el nombre de la columna 'Seguimiento' por 'Sentimiento'", "expected": "Sentimiento", "type": "text"},
-    {"num": 3, "topic": "Edición y formato", "question": "En la tabla, proceda a centrar el contenido de todas las celdas", "expected": "Ajustar en la Base de Datos", "type": "format"},
-    {"num": 4, "topic": "Edición y formato", "question": "En la tabla, ajusta el ancho de las columnas para que el texto completo sea visible", "expected": "Ajustar en la Base de Datos", "type": "format"},
-    {"num": 5, "topic": "Cálculos", "question": "Calcula el número total de llamadas registradas en la tabla", "expected": 30, "type": "numeric"},
-    {"num": 6, "topic": "Edición y formato", "question": "Utiliza la función 'Dar formato como tabla' en la tabla.", "expected": "Ajustar en la Base de Datos", "type": "format"},
-    {"num": 7, "topic": "Cálculos", "question": "Cuántas llamadas tuvieron un Sentimiento 'Very Positive'", "expected": 3, "type": "numeric"},
-    {"num": 8, "topic": "Cálculos", "question": "Calcula la duración promedio de las llamadas", "expected": 27, "type": "numeric"},
-    {"num": 9, "topic": "Edición y formato", "question": "En la tabla, ajusta el formato fecha a 'dd/mm/yyyy'", "expected": "Ajustar en la Base de Datos", "type": "format"},
-    {"num": 10, "topic": "Cálculos", "question": "Ordena la tabla por 'Puntuación' de mayor a menor y dime ¿Cuál es el puntaje máximo?", "expected": 10, "type": "numeric"},
-    {"num": 11, "topic": "Cálculos", "question": "Cuantas llamadas hay con ese puntaje Máximo", "expected": 2, "type": "numeric"},
-    {"num": 12, "topic": "Búsqueda", "question": "Si el 'ID' de un cliente es PJL-11752230. Dime cual es el nombre y apellido al que corresponde", "expected": "Linda Lopez", "type": "text"},
-    {"num": 13, "topic": "Edición y formato", "question": "En la tabla, resalta en Rojo las celdas de la columna 'Puntuación' que sean inferiores a 5", "expected": "Ajustar en la Base de Datos", "type": "format"}
-]
+# Las preguntas se evalúan directamente en el código, no necesitamos una lista separada
 
 # --- Configuración de columnas ---
 COLUMN_MAPPING = {
@@ -84,19 +72,23 @@ def evaluate_submission(submission_path):
             add_result("", "", f"Error al procesar {user_filename}", "Error", "Archivo no encontrado")
             return
 
-        # Cargar el archivo
+        # Cargar el archivo del usuario
         wb_user = load_workbook(submission_path)
-        
-        # Verificar que las hojas necesarias existen
-        required_sheets = [SHEET_NAME, ANSWERS_SHEET]
-        for sheet in required_sheets:
-            if sheet not in wb_user.sheetnames:
-                add_result("", "", f"Error al procesar {user_filename}", "Error", f"Hoja '{sheet}' no encontrada en el archivo")
-                return
+        ws_user = wb_user.active  # Usar la hoja activa
 
-        # Obtener las hojas
-        ws_data = wb_user[SHEET_NAME]
-        ws_answers = wb_user[ANSWERS_SHEET]
+        # Cargar el archivo de respuestas esperadas
+        wb_expected = load_workbook(EXPECTED_FILE)
+        ws_expected = wb_expected.active  # Usar la hoja activa
+
+        # Verificar que las columnas están en las posiciones correctas
+        for col_name, col_letter in COLUMN_MAPPING.items():
+            cell_user = ws_user[f'{col_letter}{HEADER_ROW}'].value
+            cell_expected = ws_expected[f'{col_letter}{HEADER_ROW}'].value
+            
+            if str(cell_user).strip() != col_name:
+                add_result("", "", f"Error al procesar {user_filename}", "Error", 
+                          f"Columna '{col_name}' no encontrada en la posición correcta")
+                return
 
         # Verificar y limpiar los nombres de las columnas
         # Obtener los nombres de las columnas desde la hoja
@@ -173,75 +165,36 @@ def evaluate_submission(submission_path):
                       f"Columnas faltantes en DataFrame: {missing_cols_str}")
             return
 
-        # --- PREGUNTAS DE EVALUACIÓN ---
-        
-        # Verificar las respuestas del usuario
-        for question in QUESTIONS:
-            question_num = question["num"]
-            topic = question["topic"]
-            question_text = question["question"]
-            expected = question["expected"]
-            q_type = question["type"]
-            
-            try:
-                # Buscar la respuesta del usuario en la hoja de respuestas
-                # Suponemos que las respuestas están en la columna B (B2 para pregunta 1, B3 para pregunta 2, etc.)
-                answer_cell = f"B{question_num + 1}"  # +1 porque empezamos en B2
-                user_answer = ws_answers[answer_cell].value
-                
-                if user_answer is None:
-                    add_result(question_num, topic, question_text, "Error", "Respuesta no encontrada")
-                    continue
-                    
-                if q_type == "numeric":
-                    # Convertir a número si es necesario
-                    try:
-                        user_answer = float(user_answer)
-                        expected = float(expected)
-                    except ValueError:
-                        add_result(question_num, topic, question_text, "Error", f"Respuesta no es un número: {user_answer}")
-                        continue
-                        
-                    if user_answer == expected:
-                        add_result(question_num, topic, question_text, "Correcto")
-                    else:
-                        add_result(question_num, topic, question_text, "Incorrecto", 
-                                  f"Esperado: {expected}, Obtenido: {user_answer}")
-                        
-                elif q_type == "text":
-                    # Comparar texto (case insensitive)
-                    if str(user_answer).strip().lower() == str(expected).strip().lower():
-                        add_result(question_num, topic, question_text, "Correcto")
-                    else:
-                        add_result(question_num, topic, question_text, "Incorrecto", 
-                                  f"Esperado: '{expected}', Obtenido: '{user_answer}'")
-                        
-                elif q_type == "format":
-                    # Para preguntas de formato, solo verificar que la respuesta existe
-                    add_result(question_num, topic, question_text, "Correcto")
-                    
-            except Exception as e:
-                add_result(question_num, topic, question_text, "Error", f"Error al evaluar: {str(e)}")
-        # Usar pandas para contar los IDs ya que es más robusto
-        expected_ids = 30
+        # --- PREGUNTAS DE EVALUACIÓN --
+        #PREGUNTA #1
         try:
-            # Contar IDs usando pandas (más robusto)
-            actual_ids = len(df_user["ID"])  # Usar la columna ID del DataFrame
-            if isinstance(actual_ids, int) and isinstance(expected_ids, int):
-                if actual_ids == expected_ids:
-                    add_result(1, "Edición y formato", "Cuantos ID tiene la base de datos", "Correcto")
-                else:
-                    add_result(1, "Edición y formato", "Cuantos ID tiene la base de datos", "Incorrecto",
-                              f"Esperado: {expected_ids}, Obtenido: {actual_ids}")
+            # Buscar la respuesta en M6
+            answer_cell = "M6"  # Celda específica para la pregunta 1
+            user_answer = ws_user[answer_cell].value
+            
+            if user_answer is None:
+                add_result(1, "Edición y formato", "Cuantos ID tiene la base de datos", "Error", "Respuesta no encontrada")
             else:
-                add_result(1, "Edición y formato", "Cuantos ID tiene la base de datos", "Error",
-                          f"Error en tipos de datos: expected_ids={type(expected_ids)}, actual_ids={type(actual_ids)}")
+                # Convertir a número si es necesario
+                try:
+                    user_answer = int(user_answer)
+                    expected = 30
+                    
+                    if user_answer == expected:
+                        add_result(1, "Cálculo", "¿Cuantos ID tiene la base de datos?", "Correcto",
+                                   f"Obtenido: {user_answer}")
+                    else:
+                        add_result(1, "Cálculo", "¿Cuantos ID tiene la base de datos?", "Incorrecto",
+                                  f"Esperado: 30, Obtenido: {user_answer}")
+                except ValueError:
+                    add_result(1, "Cálculo", "¿Cuantos ID tiene la base de datos?", "Error", 
+                              f"Respuesta no es un número: {user_answer}")
         except Exception as e:
-            add_result(1, "Edición y formato", "Cuantos ID tiene la base de datos", "Error",
-                      f"Error al contar IDs: {str(e)}")
+            add_result(1, "Cálculo", "¿Cuantos ID tiene la base de datos?", "Error",
+                      f"Error al evaluar respuesta: {str(e)}")
 
         # Pregunta 2: Cambia el nombre de la columna "Seguimiento" por "Sentimiento"
-        # ### AJUSTE POR C5 ###
+        
         expected_col_name = "Sentimiento"
         actual_col_name = ws_user[f'{COLUMN_MAPPING["Sentimiento"]}{HEADER_ROW}'].value
         if actual_col_name == expected_col_name:
@@ -252,34 +205,40 @@ def evaluate_submission(submission_path):
                        "Incorrecto",
                        f"Nombre de columna en usuario: '{actual_col_name}', Esperado: '{expected_col_name}'")
 
-        # Pregunta 3: Centra el contenido de todas las celdas
-        # ### AJUSTE POR C5 ###
-        # Ajusta el rango de muestreo para que empiece en C5 y cubra las columnas relevantes
-        all_cells_centered = True
-        # Rango de la tabla de datos: desde C5 hasta K_ultima_fila
-        # Para evitar recorrer celdas vacías fuera de la tabla, usaremos un rango aproximado
-        max_row_data = ws_user.cell(ws_user.max_row, COLUMN_MAPPING["ID"]).row  # Última fila con datos
-
-        # Muestreamos solo el área donde están los datos y encabezados de la tabla
-        for r_idx in range(HEADER_ROW, max_row_data + 1):
-            for c_idx in range(ws_user.cell(HEADER_ROW, COLUMN_MAPPING["ID"]).column,
-                               ws_user.cell(HEADER_ROW, COLUMN_MAPPING["Duración Llamada (Minutos)"]).column + 1):
-                cell = ws_user.cell(row=r_idx, column=c_idx)
-                if cell.alignment.horizontal != 'center':
-                    all_cells_centered = False
+        # Pregunta 3: Centra el contenido de todas las celdas verticalmente
+        # Verificar el rango C5:K36 (excluyendo C36:I36)
+        try:
+            # Definir el rango específico
+            start_row = 5  # C5
+            end_row = 36   # K36
+            
+            # Verificar cada celda en el rango, excluyendo C36:I36
+            all_cells_centered = True
+            for row in range(start_row, end_row + 1):
+                for col_letter in COLUMN_MAPPING.values():
+                    # Saltar el rango C36:I36
+                    if row == 36 and col_letter in [chr(i) for i in range(ord('C'), ord('I') + 1)]:
+                        continue
+                        
+                    cell = ws_user[f"{col_letter}{row}"]
+                    # Verificar el centrado horizontal y vertical
+                    if cell.alignment.horizontal != 'center' or cell.alignment.vertical != 'center':
+                        all_cells_centered = False
+                        break
+                if not all_cells_centered:
                     break
-            if not all_cells_centered:
-                break
 
-        if all_cells_centered:
-            add_result(3, "Edición y formato", "Centrar el contenido de todas las celdas", "Correcto",
-                       "Verificación muestral sobre el rango de la tabla.")
-        else:
-            add_result(3, "Edición y formato", "Centrar el contenido de todas las celdas", "Incorrecto",
-                       "No todas las celdas muestreadas dentro del rango de la tabla están centradas.")
+            if all_cells_centered:
+                add_result(3, "Edición y formato", "Centrar el contenido de todas las celdas", "Correcto",
+                           "Todas las celdas de la tabla están centradas.")
+            else:
+                add_result(3, "Edición y formato", "Centrar el contenido de todas las celdas", "Incorrecto",
+                           "Alguna celda de la tabla no está centrada correctamente.")
+        except Exception as e:
+            add_result(3, "Edición y formato", "Centrar el contenido de todas las celdas", "Error",
+                       f"Error al verificar el centrado: {str(e)}")
 
         # Pregunta 4: Ajusta el ancho de las columnas
-        # ### AJUSTE POR C5 ###
         # Comparamos el ancho de las columnas relevantes (C a K)
         width_adjusted = True
         for col_letter in COLUMN_MAPPING.values():
@@ -304,167 +263,276 @@ def evaluate_submission(submission_path):
                        "El ancho de algunas columnas no parece ajustado correctamente en el rango de la tabla.")
 
         # Pregunta 5: Calcula el número total de llamadas registradas
-        # Es la misma verificación que P1, usando el conteo de filas de pandas
-        if df_user.shape[0] == expected_ids:  # df_user.shape[0] ya es el número de filas de datos
-            add_result(5, "Fórmulas", "Calcula el número total de llamadas registradas", "Correcto")
-        else:
-            add_result(5, "Fórmulas", "Calcula el número total de llamadas registradas", "Incorrecto",
-                       f"Esperado: {expected_ids}, Obtenido: {df_user.shape[0]}")
+        try:
+            # Buscar la respuesta en M10
+            answer_cell = "M10"  # Celda específica para la pregunta 5
+            user_answer = ws_user[answer_cell].value
+            
+            if user_answer is None:
+                add_result(5, "Fórmulas", "Calcula el número total de llamadas registradas", "Error", "Respuesta no encontrada")
+            else:
+                # Convertir a número si es necesario
+                try:
+                    user_answer = float(user_answer)
+                    expected = 30.0  # Convertir a float para comparación consistente
+                    
+                    if user_answer == expected:
+                        add_result(5, "Fórmulas", "Calcula el número total de llamadas registradas", "Correcto")
+                    else:
+                        add_result(5, "Fórmulas", "Calcula el número total de llamadas registradas", "Incorrecto",
+                                  f"Esperado: 30, Obtenido: {user_answer}")
+                except ValueError:
+                    add_result(5, "Fórmulas", "Calcula el número total de llamadas registradas", "Error", 
+                              f"Respuesta no es un número: {user_answer}")
+        except Exception as e:
+            add_result(5, "Fórmulas", "Calcula el número total de llamadas registradas", "Error",
+                      f"Error al evaluar respuesta: {str(e)}")
 
         # Pregunta 6: Utiliza la función "Dar formato como tabla"
-        # ### AJUSTE POR C5 ###
-        # Obtener el rango de la tabla de datos, asumiendo C5:K<ultima_fila>
-        table_range_str = f"{COLUMN_MAPPING['ID']}{HEADER_ROW}:{COLUMN_MAPPING['Duración Llamada (Minutos)']}{ws_user.max_row}"
-        table_found = False
-        if ws_user.tables:
-            for table_name, table_obj in ws_user.tables.items():
-                if table_obj.ref == table_range_str:  # Compara si el rango de la tabla coincide con el esperado
-                    table_found = True
-                    break
-        if table_found:
-            add_result(6, "Fórmulas", "Utiliza la función 'Dar formato como tabla'", "Correcto")
-        else:
-            add_result(6, "Fórmulas", "Utiliza la función 'Dar formato como tabla'", "Incorrecto",
-                       f"No se encontró un formato de tabla aplicado correctamente en la hoja 'Datos' cubriendo el rango {table_range_str}.")
+        try:
+            # Verificar si hay formato de tabla aplicado
+            table_found = False
+            table_range_str = "C5:K35"  # Rango específico
+            
+            # Buscar tabla que cubra el rango C5:K35
+            if ws_user.tables:
+                for table_name, table_obj in ws_user.tables.items():
+                    if table_obj.ref == table_range_str:
+                        table_found = True
+                        break
+            
+            # Si no hay tabla, verificar si hay filtros aplicados (para LibreOffice Calc)
+            if not table_found:
+                filter_applied = False
+                for col_letter in COLUMN_MAPPING.values():
+                    if ws_user.auto_filter.ref and ws_user.auto_filter.ref.startswith(col_letter):
+                        filter_applied = True
+                        break
+            
+            if table_found or filter_applied:
+                add_result(6, "Fórmulas", "Utiliza la función 'Dar formato como tabla'", "Correcto",
+                           "Formato de tabla o filtros aplicados correctamente en el rango C5:K35")
+            else:
+                add_result(6, "Fórmulas", "Utiliza la función 'Dar formato como tabla'", "Incorrecto",
+                           "No se encontró formato de tabla ni filtros aplicados en el rango C5:K35")
+        except Exception as e:
+            add_result(6, "Fórmulas", "Utiliza la función 'Dar formato como tabla'", "Error",
+                       f"Error al verificar el formato de tabla: {str(e)}")
 
         # Pregunta 7: Cuántas llamadas tuvieron un Sentimiento "Very Positive"
-        expected_very_positive = 4
-        # Asegúrate de que la columna "Sentimiento" exista después del posible cambio de nombre
-        if "Sentimiento" in df_user.columns:
-            actual_very_positive = df_user['Sentimiento'].astype(str).str.strip().eq("Very Positive").sum()
-            if actual_very_positive == expected_very_positive:
-                add_result(7, "Fórmulas", "Cuántas llamadas tuvieron un Sentimiento 'Very Positive'", "Correcto")
+        try:
+            # Buscar la respuesta en M12
+            answer_cell = "M12"  # Celda específica para la pregunta 7
+            user_answer = ws_user[answer_cell].value
+            
+            if user_answer is None:
+                add_result(7, "Fórmulas", "Cuántas llamadas tuvieron un Sentimiento 'Very Positive'", "Error", "Respuesta no encontrada")
             else:
-                add_result(7, "Fórmulas", "Cuántas llamadas tuvieron un Sentimiento 'Very Positive'", "Incorrecto",
-                           f"Esperado: {expected_very_positive}, Obtenido: {actual_very_positive}")
-        else:
-            add_result(7, "Fórmulas", "Cuántas llamadas tuvieron un Sentimiento 'Very Positive'", "Incorrecto",
-                       "La columna 'Sentimiento' no se encontró en el archivo del usuario.")
+                # Convertir a número si es necesario
+                try:
+                    user_answer = int(user_answer)
+                    expected = 3  # Convertir a float para comparación consistente
+                    
+                    if user_answer == expected:
+                        add_result(7, "Fórmulas", "Cuántas llamadas tuvieron un Sentimiento 'Very Positive'", "Correcto",
+                                   f"Esperado: 3, Obtenido: {user_answer}")
+                    else:
+                        add_result(7, "Fórmulas", "Cuántas llamadas tuvieron un Sentimiento 'Very Positive'", "Incorrecto",
+                                   f"Esperado: 3, Obtenido: {user_answer}")
+                except ValueError:
+                    add_result(7, "Fórmulas", "Cuántas llamadas tuvieron un Sentimiento 'Very Positive'", "Error", 
+                              f"Respuesta no es un número: {user_answer}")
+        except Exception as e:
+            add_result(7, "Fórmulas", "Cuántas llamadas tuvieron un Sentimiento 'Very Positive'", "Error",
+                      f"Error al evaluar respuesta: {str(e)}")
 
         # Pregunta 8: Calcula la duración promedio de las llamadas
-        # Suma de todas las duraciones que proporcionaste (14+26+...+36 = 780).
-        # Total de filas de datos que proporcionaste = 30.
-        expected_avg_duration = 780 / 30  # 26.0 (Calcula esto con tus 30 datos completos)
-
-        if "Duración Llamada (Minutos)" in df_user.columns:
-            df_user['Duración Llamada (Minutos)'] = pd.to_numeric(df_user['Duración Llamada (Minutos)'],
-                                                                  errors='coerce')
-            actual_avg_duration = df_user['Duración Llamada (Minutos)'].mean()
-            if abs(actual_avg_duration - expected_avg_duration) < 0.01:  # Tolerancia para floats
-                add_result(8, "Fórmulas", "Calcula la duración promedio de las llamadas", "Correcto")
+        try:
+            # Verificar la fórmula en K36
+            formula_cell = "K36"
+            formula = ws_user[formula_cell].value
+            
+            # Verificar si la fórmula es correcta (acepta tanto PROMEDIO como AVERAGE)
+            formula_correct = False
+            
+            # Verificar si la fórmula es correcta (considerando mayúsculas/minúsculas)
+            if formula:
+                formula_upper = str(formula).upper()
+                if formula_upper == "=PROMEDIO(K6:K35)" or formula_upper == "=AVERAGE(K6:K35)":
+                    formula_correct = True
+            
+            # Verificar la respuesta en M13
+            answer_cell = "M13"
+            user_answer = ws_user[answer_cell].value
+            
+            if user_answer is None:
+                add_result(8, "Fórmulas", "Calcula la duración promedio de las llamadas", "Error", "Respuesta no encontrada")
             else:
-                add_result(8, "Fórmulas", "Calcula la duración promedio de las llamadas", "Incorrecto",
-                           f"Esperado: {expected_avg_duration:.2f}, Obtenido: {actual_avg_duration:.2f}")
-        else:
-            add_result(8, "Fórmulas", "Calcula la duración promedio de las llamadas", "Incorrecto",
-                       "La columna 'Duración Llamada (Minutos)' no se encontró en el archivo del usuario.")
+                # Convertir a número si es necesario
+                try:
+                    user_answer = int(user_answer)  # Convertir a entero
+                    expected_answer = 27  # Valor redondeado al entero más cercano
+                    
+                    if formula_correct and user_answer == expected_answer:
+                        add_result(8, "Fórmulas", "Calcula la duración promedio de las llamadas", "Correcto",
+                                  "Fórmula y respuesta correctas")
+                    elif not formula_correct:
+                        add_result(8, "Fórmulas", "Calcula la duración promedio de las llamadas", "Incorrecto",
+                                  f"Fórmula incorrecta: {formula}")
+                    else:
+                        add_result(8, "Fórmulas", "Calcula la duración promedio de las llamadas", "Incorrecto",
+                                  f"Respuesta incorrecta: {user_answer}, esperado: 27")
+                except ValueError:
+                    add_result(8, "Fórmulas", "Calcula la duración promedio de las llamadas", "Error", 
+                              f"Respuesta no es un número: {user_answer}")
+        except Exception as e:
+            add_result(8, "Fórmulas", "Calcula la duración promedio de las llamadas", "Error",
+                      f"Error al evaluar respuesta: {str(e)}")
 
         # Pregunta 9: Ajusta el formato fecha a "dd/mm/yyyy"
-        # ### AJUSTE POR C5 ###
-        date_format_correct = True
-        date_col_letter = COLUMN_MAPPING["Fecha"]
-        # Recorre las celdas de datos de la columna de fecha (desde DATA_START_ROW)
-        for row_idx in range(DATA_START_ROW, ws_user.max_row + 1):
-            cell = ws_user[f'{date_col_letter}{row_idx}']
-            if cell.data_type != 'd' or cell.number_format != 'dd/mm/yyyy':
-                date_format_correct = False
-                break
-        if date_format_correct:
-            add_result(9, "Filtrado", "Ajusta el formato fecha a 'dd/mm/yyyy'", "Correcto")
-        else:
-            add_result(9, "Filtrado", "Ajusta el formato fecha a 'dd/mm/yyyy'", "Incorrecto",
-                       "El formato de fecha no es 'dd/mm/yyyy' o el tipo de dato no es fecha en todas las celdas de la columna 'Fecha'.")
-
-        # Pregunta 10: Ordena la tabla por "Puntuación" de mayor a menor y dime ¿Cuál es el puntaje máximo?
-        if "Puntuación" in df_user.columns:
-            df_user_sorted_by_score = df_user.sort_values(by="Puntuación", ascending=False).reset_index(drop=True)
-            df_expected_sorted_by_score = df_expected.sort_values(by="Puntuación", ascending=False).reset_index(
-                drop=True)
-
-            # Compara si los DataFrames son idénticos después de ordenar
-            order_correct = df_user_sorted_by_score.equals(df_expected_sorted_by_score)
-
-            max_score_expected = 10
-            max_score_actual = df_user['Puntuación'].max()
-
-            if order_correct and max_score_actual == max_score_expected:
-                add_result(10, "Filtrado", "Ordena la tabla por 'Puntuación' de mayor a menor y puntaje máximo",
-                           "Correcto")
-            else:
-                obs = []
-                if not order_correct: obs.append("Tabla no ordenada correctamente por Puntuación (Mayor a Menor).")
-                if max_score_actual != max_score_expected: obs.append(
-                    f"Puntaje máximo esperado: {max_score_expected}, Obtenido: {max_score_actual}.")
-                add_result(10, "Filtrado", "Ordena la tabla por 'Puntuación' de mayor a menor y puntaje máximo",
-                           "Incorrecto", " ".join(obs))
-        else:
-            add_result(10, "Filtrado", "Ordena la tabla por 'Puntuación' de mayor a menor y puntaje máximo",
-                       "Incorrecto", "La columna 'Puntuación' no se encontró.")
-
-        # Pregunta 11: Cuantas llamadas hay con ese puntaje Máximo
-        expected_count_max_score = 5  # 5 llamadas con puntuación 10 en los 30 datos
-        if "Puntuación" in df_user.columns:
-            max_score = df_user['Puntuación'].max()
-            actual_count_max_score = df_user[df_user['Puntuación'] == max_score].shape[0]
-            if actual_count_max_score == expected_count_max_score:
-                add_result(11, "Filtrado", "Cuantas llamadas hay con ese puntaje Máximo", "Correcto")
-            else:
-                add_result(11, "Filtrado", "Cuantas llamadas hay con ese puntaje Máximo", "Incorrecto",
-                           f"Esperado: {expected_count_max_score}, Obtenido: {actual_count_max_score}.")
-        else:
-            add_result(11, "Filtrado", "Cuantas llamadas hay con ese puntaje Máximo", "Incorrecto",
-                       "La columna 'Puntuación' no se encontró.")
-
-        # Pregunta 12: Si el "ID" de un cliente es PIL-11752230. Dime cual es el nombre y apellido al que corresponde
-        search_id = "PJL-11752230"  # Corregí el ID a PJL-11752230, según tu lista de IDs
-        expected_name = "Linda Lopez"
-        if "ID" in df_user.columns and "Nombre del Cliente" in df_user.columns:
-            found_row = df_user[df_user['ID'].astype(str).str.strip() == search_id]
-            if not found_row.empty:
-                actual_name = found_row['Nombre del Cliente'].iloc[0]
-                if actual_name == expected_name:
-                    add_result(12, "Filtrado", f"Nombre del cliente con ID {search_id}", "Correcto")
-                else:
-                    add_result(12, "Filtrado", f"Nombre del cliente con ID {search_id}", "Incorrecto",
-                               f"Esperado: '{expected_name}', Obtenido: '{actual_name}'.")
-            else:
-                add_result(12, "Filtrado", f"Nombre del cliente con ID {search_id}", "Incorrecto",
-                           f"ID '{search_id}' no encontrado en la base de datos del usuario.")
-        else:
-            add_result(12, "Filtrado", f"Nombre del cliente con ID {search_id}", "Incorrecto",
-                       "Las columnas 'ID' o 'Nombre del Cliente' no se encontraron.")
-
-        # Pregunta 13: Resalta en Rojo las celdas de la columna "Puntuación" que sean inferiores a 5, usando Formato Condicional.
-        # ### AJUSTE POR C5 ###
-        conditional_formatting_correct = False
-        score_col_letter = COLUMN_MAPPING["Puntuación"]
-        score_col_idx = ws_user[f'{score_col_letter}{HEADER_ROW}'].column  # Obtener índice numérico de la columna
-
-        # Verificar si hay alguna regla de formato condicional que coincida con la condición y el rango.
-        expected_rgb_color = 'FFFF0000'  # Rojo puro para la fuente
-
-        for cf_rule in ws_user.conditional_formatting.cf_rules:
-            applies_to_score_column = False
-            for cf_range in cf_rule.ranges:
-                # Check if the range (e.g., 'F6:F35') contains 'F' and the data rows
-                if score_col_letter in cf_range.coord and cf_range.coord.endswith(
-                        f'{DATA_START_ROW}:{score_col_letter}{ws_user.max_row}'):
-                    applies_to_score_column = True
+        try:
+            # Verificar el formato de fecha en el rango G6:G35
+            date_format_correct = True
+            start_row = 6  # G6
+            end_row = 35   # G35
+            
+            # Verificar cada celda en el rango
+            for row in range(start_row, end_row + 1):
+                cell = ws_user[f'G{row}']
+                if cell.data_type != 'd' or cell.number_format != 'dd/mm/yyyy':
+                    date_format_correct = False
                     break
 
-            if applies_to_score_column and cf_rule.type == 'cellIs' and cf_rule.operator == 'lessThan':
-                if cf_rule.formula and cf_rule.formula[0] == "5":
-                    if cf_rule.dxf and cf_rule.dxf.font and cf_rule.dxf.font.color and cf_rule.dxf.font.color.rgb == expected_rgb_color:
-                        conditional_formatting_correct = True
-                        break
+            if date_format_correct:
+                add_result(9, "Fórmulas", "Ajusta el formato fecha a 'dd/mm/yyyy'", "Correcto",
+                           "Formato de fecha correcto en todas las celdas del rango G6:G35")
+            else:
+                add_result(9, "Fórmulas", "Ajusta el formato fecha a 'dd/mm/yyyy'", "Incorrecto",
+                           "El formato de fecha no es 'dd/mm/yyyy' o el tipo de dato no es fecha en alguna celda del rango G6:G35")
+        except Exception as e:
+            add_result(9, "Fórmulas", "Ajusta el formato fecha a 'dd/mm/yyyy'", "Error",
+                      f"Error al verificar el formato de fecha: {str(e)}")
 
-        if conditional_formatting_correct:
-            add_result(13, "Condicional", "Resalta en Rojo las celdas de la columna 'Puntuación' (< 5) con FC",
-                       "Correcto", "Se detectó una regla de formato condicional adecuada (menos de 5, rojo).")
-        else:
-            add_result(13, "Condicional", "Resalta en Rojo las celdas de la columna 'Puntuación' (< 5) con FC",
-                       "Incorrecto",
-                       "No se detectó una regla de formato condicional correcta para la columna Puntuación (menos de 5, color rojo) o no aplica al rango esperado.")
+        # Pregunta 10: Ordena la tabla por 'Puntuación' de mayor a menor y dime ¿Cuál es el puntaje máximo?
+        try:
+            # Verificar ordenación en la columna F (Puntuación)
+            order_correct = True
+            score_col = "F"  # Columna de Puntuación
+            
+            # Verificar que los valores estén ordenados de mayor a menor
+            for row in range(6, 35):  # De F6 a F35
+                current_cell = ws_user[f'{score_col}{row}']
+                next_cell = ws_user[f'{score_col}{row + 1}']
+                
+                if current_cell.value is not None and next_cell.value is not None:
+                    if current_cell.value < next_cell.value:
+                        order_correct = False
+                        break
+            
+            # Verificar la respuesta en M15
+            answer_cell = "M15"
+            user_answer = ws_user[answer_cell].value
+            
+            if user_answer is None:
+                add_result(10, "Fórmulas", "Ordena la tabla por 'Puntuación' de mayor a menor y puntaje máximo",
+                           "Error", "Respuesta no encontrada")
+            else:
+                try:
+                    user_answer = int(user_answer)  # Convertir a entero
+                    expected_answer = 10  # Valor máximo esperado
+                    
+                    if order_correct and user_answer == expected_answer:
+                        add_result(10, "Fórmulas", "Ordena la tabla por 'Puntuación' de mayor a menor y puntaje máximo",
+                                  "Correcto", "Ordenación y respuesta correctas")
+                    elif not order_correct:
+                        add_result(10, "Fórmulas", "Ordena la tabla por 'Puntuación' de mayor a menor y puntaje máximo",
+                                  "Incorrecto", "Los valores no están ordenados de mayor a menor")
+                    else:
+                        add_result(10, "Fórmulas", "Ordena la tabla por 'Puntuación' de mayor a menor y puntaje máximo",
+                                  "Incorrecto", f"Respuesta incorrecta: {user_answer}, esperado: 10")
+                except ValueError:
+                    add_result(10, "Fórmulas", "Ordena la tabla por 'Puntuación' de mayor a menor y puntaje máximo",
+                              "Error", f"Respuesta no es un número: {user_answer}")
+        except Exception as e:
+            add_result(10, "Fórmulas", "Ordena la tabla por 'Puntuación' de mayor a menor y puntaje máximo",
+                      "Error", f"Error al evaluar respuesta: {str(e)}")
+
+        # Pregunta 11: Cuantas llamadas hay con ese puntaje Máximo
+        try:
+            # Verificar la respuesta en M16
+            answer_cell = "M16"
+            user_answer = ws_user[answer_cell].value
+            
+            if user_answer is None:
+                add_result(11, "Fórmulas", "Cuantas llamadas hay con ese puntaje Máximo", "Error", "Respuesta no encontrada")
+            else:
+                try:
+                    user_answer = int(user_answer)  # Convertir a entero
+                    expected_answer = 2  # Valor esperado
+                    
+                    if user_answer == expected_answer:
+                        add_result(11, "Fórmulas", "Cuantas llamadas hay con ese puntaje Máximo", "Correcto")
+                    else:
+                        add_result(11, "Fórmulas", "Cuantas llamadas hay con ese puntaje Máximo", "Incorrecto",
+                                  f"Respuesta incorrecta: {user_answer}, esperado: 2")
+                except ValueError:
+                    add_result(11, "Fórmulas", "Cuantas llamadas hay con ese puntaje Máximo", "Error", 
+                              f"Respuesta no es un número: {user_answer}")
+        except Exception as e:
+            add_result(11, "Fórmulas", "Cuantas llamadas hay con ese puntaje Máximo", "Error",
+                      f"Error al evaluar respuesta: {str(e)}")
+
+        # Pregunta 12: Si el "ID" de un cliente es PJL-11752230. Dime cual es el nombre y apellido al que corresponde
+        try:
+            # Verificar la respuesta en M17
+            answer_cell = "M17"
+            user_answer = ws_user[answer_cell].value
+            
+            if user_answer is None:
+                add_result(12, "Fórmulas", "Si el 'ID' de un cliente es PJL-11752230. Dime cual es el nombre y apellido al que corresponde", "Error", "Respuesta no encontrada")
+            else:
+                # Convertir a minúsculas para comparación insensible a mayúsculas/minúsculas
+                user_answer_lower = str(user_answer).lower()
+                expected_name = "linda lopez"
+                
+                if user_answer_lower == expected_name:
+                    add_result(12, "Fórmulas", "Si el 'ID' de un cliente es PJL-11752230. Dime cual es el nombre y apellido al que corresponde", "Correcto")
+                else:
+                    add_result(12, "Fórmulas", "Si el 'ID' de un cliente es PJL-11752230. Dime cual es el nombre y apellido al que corresponde", "Incorrecto",
+                              f"Respuesta incorrecta: {user_answer}, esperado: 'Linda Lopez'")
+        except Exception as e:
+            add_result(12, "Fórmulas", "Si el 'ID' de un cliente es PJL-11752230. Dime cual es el nombre y apellido al que corresponde", "Error",
+                      f"Error al evaluar respuesta: {str(e)}")
+
+        # Pregunta 13: Resalta en Rojo las celdas de la columna "Puntuación" que sean inferiores a 5 (<5)
+        try:
+            # Verificar formato condicional en el rango F6:F35
+            score_col = "F"  # Columna de Puntuación
+            format_range = f"{score_col}6:{score_col}35"
+            
+            # Verificar si hay formato condicional correcto
+            conditional_formatting_correct = False
+            
+            # Verificar cada celda en el rango
+            for row in range(6, 36):  # F6:F35
+                cell = ws_user[f'{score_col}{row}']
+                if cell.value is not None and cell.value < 5:
+                    # Verificar si la celda está en rojo
+                    if cell.font and cell.font.color and cell.font.color.rgb == 'FFFF0000':
+                        conditional_formatting_correct = True
+                    else:
+                        conditional_formatting_correct = False
+                        break
+            
+            if conditional_formatting_correct:
+                add_result(13, "Fórmulas", "Resalta en Rojo las celdas de la columna 'Puntuación' que sean inferiores a 5 (<5)",
+                           "Correcto", "Formato condicional correcto en todas las celdas menores a 5")
+            else:
+                add_result(13, "Fórmulas", "Resalta en Rojo las celdas de la columna 'Puntuación' que sean inferiores a 5 (<5)",
+                           "Incorrecto", "No todas las celdas menores a 5 están en rojo o hay celdas con formato incorrecto")
+        except Exception as e:
+            add_result(13, "Fórmulas", "Resalta en Rojo las celdas de la columna 'Puntuación' que sean inferiores a 5 (<5)",
+                      "Error", f"Error al evaluar formato condicional: {str(e)}")
 
         # Pregunta 14: Crea un gráfico de barras para mostrar la relación entre "Nombre del cliente" y "Puntuación".
         chart1_found = False
